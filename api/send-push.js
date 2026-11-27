@@ -5,33 +5,30 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const {
-    SUPABASE_URL,
-    SUPABASE_SECRET_KEY,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  } = process.env;
-
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return res.status(500).json({ error: 'Missing environment variables' });
-  }
-
-  webpush.setVapidDetails(
-    'mailto:admin@maps.zaritsuri.com',
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-  );
-
   try {
+    const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim();
+    const SUPABASE_SECRET_KEY = (process.env.SUPABASE_SECRET_KEY || '').trim();
+    const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
+    const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || '').trim();
+
+    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(500).json({ error: 'Missing environment variables' });
+    }
+
+    webpush.setVapidDetails(
+      'mailto:admin@maps.zaritsuri.com',
+      VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY
+    );
+
     const {
       title = '科学部 予定管理',
       body = '',
       url = 'https://maps.zaritsuri.com/schedule/',
-      targetUsers = null, // null または ['all'] なら全員、['太郎', '花子'] なら該当者のみ
-      excludeUser = null  // 送信者本人を除外する場合に指定
+      targetUsers = null,
+      excludeUser = null
     } = req.body || {};
 
-    // Supabase から購読一覧を取得（新APIキーのため apikey ヘッダのみ使用）
     const supaRes = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?select=*`, {
       method: 'GET',
       headers: {
@@ -46,7 +43,6 @@ export default async function handler(req, res) {
 
     const subscriptions = await supaRes.json();
 
-    // 送信対象の絞り込み
     const targets = subscriptions.filter((sub) => {
       if (excludeUser && sub.user_name === excludeUser) return false;
       if (!targetUsers || targetUsers.includes('all')) return true;
@@ -79,7 +75,6 @@ export default async function handler(req, res) {
       })
     );
 
-    // 無効になった購読情報を削除
     await Promise.all(
       expiredEndpoints.map((ep) =>
         fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(ep)}`, {
